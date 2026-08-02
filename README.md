@@ -171,6 +171,12 @@ policy, so the stack does not silently reclaim ports 80/443 on every boot. Run
 **Ports 80/443 already in use.** Set `HTTP_PORT` / `HTTPS_PORT` in `.env`. The
 URL then needs the port: `https://joomla.test:8443`.
 
+**Cannot reach the site from another device.** Intended: ports bind to
+`127.0.0.1` only. The admin credentials in `.env.example` are public in this
+repo, so binding all interfaces would expose the admin panel to everyone on the
+network. To test from a phone, drop the `127.0.0.1:` prefix in `compose.yaml`
+**and** change `JOOMLA_ADMIN_PASSWORD` in your `.env` first.
+
 **`make up` says Joomla did not install.** `make logs` — usually the database
 volume is half-initialised from an interrupted first run. `make destroy && make up`
 fixes it.
