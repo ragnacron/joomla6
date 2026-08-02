@@ -270,6 +270,24 @@ format. Parsing that table inside a Makefile is exactly the kind of thing that
 breaks silently a year later, so `make uninstall` with no `ID` just prints the
 list and asks for the id. Two seconds of human, zero fragile shell.
 
+`extension:remove` accepts **any** extension type, and removing a package id
+also removes every extension that package installed — verified. Only the
+convenience listing was ever component-only, which made packages look
+unsupported. It now takes `TYPE`, defaulting to `package` since that is the
+usual deliverable here:
+
+| `TYPE` | rows on a fresh site |
+|---|---|
+| `package` (default) | 3 |
+| `component` | 38 |
+| `plugin` | 157 |
+| empty — every type | 254 |
+
+The default matters more than it looks: an unfiltered list is 254 rows, which is
+not a picker, it is a haystack. Filtering by non-core (`protected=0`) would be
+sharper still, but that means SQL and a hardcoded table prefix in the Makefile —
+a worse trade than one `TYPE` variable.
+
 ### Sample component — removed
 
 A minimal `com_example` (manifest, admin and site view, one CSS file) shipped
@@ -365,6 +383,8 @@ these results were recorded.
 | 15a | Joomla 6.1 installs on MariaDB 10.5.29 | 76 tables, `10.5.29-MariaDB-ubu2004`, site + component OK |
 | 16 | `make destroy` → `up` → `deploy` from nothing | full stack + component back in **11.7s** (images cached) |
 | 17 | `help`, `cli`, `db`, `uninstall` listing | all pass |
+| 22 | `extension:remove` on a **package** id | removes the package and cascades to its component — rows and files both gone |
+| 23 | `uninstall` listing for `TYPE=package` / `component` / empty | 3 / 38 / 254 rows |
 | 19 | Deploy a zip from **outside** this repo | ✓ absolute and relative paths |
 | 19a | A real `pkg_*` package with a nested component zip | both rows registered: `package Hello Package`, `component Example` |
 | 20 | Missing, non-existent, or non-zip `ZIP` | each refused with its own message |

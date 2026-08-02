@@ -2,6 +2,10 @@
 # repository's build output. Building it is that repository's job, not this one's.
 ZIP ?=
 
+# Which extension type `make uninstall` lists when given no ID. Packages are the
+# usual deliverable here; TYPE=component narrows it, TYPE= lists all 250-odd.
+TYPE ?= package
+
 DC := docker compose
 EXEC := $(DC) exec -T joomla
 
@@ -52,10 +56,13 @@ deploy: ## Install a built zip: make deploy ZIP=../dist/pkg_yours.zip
 	@$(DC) cp "$(ZIP)" joomla:/tmp/deploy.zip >/dev/null
 	@$(EXEC) php cli/joomla.php extension:install --path=/tmp/deploy.zip
 
-uninstall: ## Remove an extension: make uninstall ID=123 (no ID lists them)
-	@test -n "$(ID)" || { $(EXEC) php cli/joomla.php extension:list --type=component; \
-		echo; echo "Re-run with the id: make uninstall ID=<id>"; exit 1; }
+uninstall: ## Remove any extension: make uninstall ID=123 (no ID lists TYPE, default package)
+	@test -n "$(ID)" || { $(EXEC) php cli/joomla.php extension:list $(if $(TYPE),--type=$(TYPE)); \
+		echo; echo "Re-run with the id:  make uninstall ID=<id>"; \
+		echo "Listing $(if $(TYPE),type '$(TYPE)',every type). Change it with TYPE=component, or TYPE= for all."; \
+		exit 1; }
 	@# -n skips the confirmation prompt; typing the id was the confirmation.
+	@# Removing a package id also removes the extensions it installed — verified.
 	@$(EXEC) php cli/joomla.php extension:remove $(ID) -n
 
 shell: ## Bash inside the Joomla container

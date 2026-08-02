@@ -92,9 +92,21 @@ For a genuinely clean slate — a deleted file, a renamed element, a changed tab
 schema:
 
 ```
-make uninstall            # lists extensions and their ids
-make uninstall ID=252
+make uninstall                     # lists packages and their ids
+make uninstall ID=260
 make deploy ZIP=~/code/pkg_hello/dist/pkg_hello.zip
+```
+
+Removing a package id also removes every extension that package installed, so
+one id is usually all you need. `uninstall` works on any extension type — only
+the convenience listing is filtered, and it defaults to `package` because that
+is the usual deliverable:
+
+```
+make uninstall                     # packages          (3 rows on a fresh site)
+make uninstall TYPE=component      # components       (38)
+make uninstall TYPE=plugin         # plugins         (157)
+make uninstall TYPE=               # every type      (254)
 ```
 
 ## All commands
@@ -108,7 +120,7 @@ Run `make` on its own for the list.
 | `down` | Stop, keep data |
 | `destroy` | Stop and delete all data — full reset |
 | `deploy` | Install a built zip from `ZIP=<path>` |
-| `uninstall` | Remove an extension by id |
+| `uninstall` | Remove any extension by id; no id lists `TYPE` (default `package`) |
 | `shell` | Bash in the Joomla container |
 | `cli` | Joomla CLI, e.g. `make cli ARGS="config:get"` |
 | `logs` | Tail all services |
