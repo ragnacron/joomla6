@@ -187,3 +187,7 @@ rebuild with `make up`.
 **Changes not showing.** `make deploy` again — editing `src/` alone changes
 nothing until it is installed. That is the deliberate trade-off of this setup;
 see SPEC.md §10.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
