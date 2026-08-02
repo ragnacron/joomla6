@@ -1,4 +1,4 @@
-COMPONENT ?= com_example
+COMPONENT ?=
 DC := docker compose
 EXEC := $(DC) exec -T joomla
 
@@ -42,11 +42,13 @@ down: ## Stop, keep the database and site
 destroy: ## Stop and delete all data — full reset
 	$(DC) down -v
 
-deploy: ## Package and install COMPONENT (default com_example)
+deploy: ## Package and install: make deploy COMPONENT=com_yours
+	@test -n "$(COMPONENT)" || { echo "usage: make deploy COMPONENT=com_yours"; exit 1; }
 	@$(EXEC) php /usr/local/bin/zip.php /src/$(COMPONENT) /tmp/$(COMPONENT).zip
 	@$(EXEC) php cli/joomla.php extension:install --path=/tmp/$(COMPONENT).zip
 
-package: ## Write an installable dist/COMPONENT.zip for a real site
+package: ## Write dist/COMPONENT.zip for a real site
+	@test -n "$(COMPONENT)" || { echo "usage: make package COMPONENT=com_yours"; exit 1; }
 	@mkdir -p dist
 	@$(EXEC) php /usr/local/bin/zip.php /src/$(COMPONENT) /tmp/$(COMPONENT).zip
 	@$(DC) cp joomla:/tmp/$(COMPONENT).zip dist/$(COMPONENT).zip
@@ -55,7 +57,8 @@ package: ## Write an installable dist/COMPONENT.zip for a real site
 uninstall: ## Remove an extension: make uninstall ID=123 (no ID lists them)
 	@test -n "$(ID)" || { $(EXEC) php cli/joomla.php extension:list --type=component; \
 		echo; echo "Re-run with the id: make uninstall ID=<id>"; exit 1; }
-	@$(EXEC) php cli/joomla.php extension:remove --id=$(ID)
+	@# -n skips the confirmation prompt; typing the id was the confirmation.
+	@$(EXEC) php cli/joomla.php extension:remove $(ID) -n
 
 shell: ## Bash inside the Joomla container
 	$(DC) exec joomla bash

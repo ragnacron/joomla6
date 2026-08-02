@@ -24,8 +24,9 @@ See [SPEC.md](SPEC.md) for why it is built this way.
 ```
 make setup     # .env, certificate, prints the hosts line
 make up        # ~1 min on first run — installs Joomla
-make deploy    # builds and installs src/com_example
 ```
+
+That gives you a working Joomla 6 site. Adding a component is the next section.
 
 `make setup` runs `mkcert -install`, which **asks for your sudo password** to put
 the local CA into the system trust store. That is the one privileged step; it is
@@ -54,7 +55,7 @@ Admin credentials are in `.env` (`devpassword123` by default — Joomla requires
 
 ## Developing a component
 
-Put it in `src/`, mirroring `src/com_example/`:
+Create it under `src/`, one directory per component:
 
 ```
 src/com_yours/
@@ -74,8 +75,8 @@ That zips the source and runs Joomla's real installer, so every change is
 validated against your manifest the same way a user's install would be. Refresh
 the browser to see it.
 
-`COMPONENT` defaults to `com_example`, so plain `make deploy` works while you
-have one component.
+`COMPONENT` has no default — the directory name under `src/` is always explicit,
+so `deploy` cannot install something you did not mean.
 
 Reinstalling over an existing version is the normal path and is what `deploy`
 does. For a genuinely clean slate — renamed element, changed table schema —
@@ -122,9 +123,9 @@ component:
 
 | Host | Container |
 |---|---|
-| `src/com_example/admin` | `/var/www/html/administrator/components/com_example` |
-| `src/com_example/site` | `/var/www/html/components/com_example` |
-| `src/com_example/media` | `/var/www/html/media/com_example` |
+| `src/com_yours/admin` | `/var/www/html/administrator/components/com_yours` |
+| `src/com_yours/site` | `/var/www/html/components/com_yours` |
+| `src/com_yours/media` | `/var/www/html/media/com_yours` |
 
 **PhpStorm:** Settings → PHP → Servers → add `joomla.test`, port 443, debugger
 Xdebug, tick "Use path mappings", enter the pairs above.
@@ -140,9 +141,9 @@ Xdebug, tick "Use path mappings", enter the pairs above.
     "request": "launch",
     "port": 9003,
     "pathMappings": {
-      "/var/www/html/administrator/components/com_example": "${workspaceFolder}/src/com_example/admin",
-      "/var/www/html/components/com_example": "${workspaceFolder}/src/com_example/site",
-      "/var/www/html/media/com_example": "${workspaceFolder}/src/com_example/media"
+      "/var/www/html/administrator/components/com_yours": "${workspaceFolder}/src/com_yours/admin",
+      "/var/www/html/components/com_yours": "${workspaceFolder}/src/com_yours/site",
+      "/var/www/html/media/com_yours": "${workspaceFolder}/src/com_yours/media"
     }
   }]
 }

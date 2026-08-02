@@ -42,9 +42,9 @@ joomla6-dev/
 │   ├── xdebug.ini
 │   ├── proxy.conf               # makes PHP see HTTPS behind Caddy
 │   └── zip.php                  # cross-platform packer, runs inside the container
-├── src/
-│   └── com_example/             # sample component — proves the loop works
-│       ├── com_example.xml      # manifest
+├── src/                         # your components, one directory each
+│   └── com_yours/
+│       ├── com_yours.xml        # manifest
 │       ├── admin/
 │       ├── site/
 │       └── media/
@@ -69,7 +69,7 @@ Four containers on one user-defined bridge network. Only Caddy publishes ports.
 ### 3.1 `caddy` — TLS terminator
 
 - Image: `caddy:2-alpine`, unmodified.
-- Publishes `${HTTP_PORT:-80}:80` and `${HTTPS_PORT:-443}:443`.
+- Publishes `127.0.0.1:${HTTP_PORT:-80}:80` and `127.0.0.1:${HTTPS_PORT:-443}:443` — loopback only, because `.env.example` ships a known admin password.
 - Mounts `./Caddyfile` and `./certs` read-only.
 
 ```caddyfile
@@ -94,7 +94,7 @@ Built from `docker/joomla.Dockerfile`:
 ```dockerfile
 FROM joomla:6.1-php8.4-apache
 RUN pecl install xdebug && docker-php-ext-enable xdebug
-COPY xdebug.ini /usr/local/etc/php/conf.d/99-xdebug.ini
+COPY xdebug.ini /usr/local/etc/php/conf.d/zz-xdebug.ini
 ```
 
 Volumes:
@@ -235,10 +235,10 @@ Windows and the Debian-based Joomla image, and PHP's zip extension is a hard
 Joomla requirement — so it is guaranteed present exactly where we need it. One
 code path, three platforms, no `tar`/`Compress-Archive` divergence.
 
-`make deploy COMPONENT=com_example`:
+`make deploy COMPONENT=com_yours`:
 
-1. `docker compose exec -T joomla php /usr/local/bin/zip.php /src/com_example /tmp/com_example.zip`
-2. `docker compose exec -T joomla php cli/joomla.php extension:install --path=/tmp/com_example.zip`
+1. `docker compose exec -T joomla php /usr/local/bin/zip.php /src/com_yours /tmp/com_yours.zip`
+2. `docker compose exec -T joomla php cli/joomla.php extension:install --path=/tmp/com_yours.zip`
 
 `extension:install` on an already-installed extension runs the installer's
 update path, so the same target covers first install and every subsequent
@@ -251,16 +251,19 @@ format. Parsing that table inside a Makefile is exactly the kind of thing that
 breaks silently a year later, so `make uninstall` with no `ID` just prints the
 list and asks for the id. Two seconds of human, zero fragile shell.
 
-`COMPONENT` defaults to `com_example`, so `make deploy` alone works while you
-have one component.
+`COMPONENT` has no default. Naming the directory every time costs nothing and
+means `deploy` can never install something you did not name.
 
-### Sample component
+### Sample component — removed
 
-A deliberately minimal `com_example`: a manifest, one admin controller/view
-rendering "it works", one site view, one CSS file in `media/`. Its only job is
-to be the smoke test — if `make deploy` shows it in the admin menu, the whole
-chain (build → install → serve → TLS) is proven. Real components replace or
-sit beside it.
+A minimal `com_example` (manifest, admin and site view, one CSS file) shipped
+initially as the smoke test, and is what §9 was verified against. It was removed
+once that verification was done: an empty `src/` is the honest starting point for
+a repository whose whole purpose is holding *your* components, and a permanent
+sample is one more thing to keep in sync with Joomla's evolving MVC conventions.
+
+`src/` therefore contains only a README. It must not be deleted — it is the
+bind-mount source, and Docker silently creates a missing one as root.
 
 ---
 
@@ -290,9 +293,9 @@ needs, per component:
 
 | Host | Container |
 |---|---|
-| `src/com_example/admin` | `/var/www/html/administrator/components/com_example` |
-| `src/com_example/site` | `/var/www/html/components/com_example` |
-| `src/com_example/media` | `/var/www/html/media/com_example` |
+| `src/com_yours/admin` | `/var/www/html/administrator/components/com_yours` |
+| `src/com_yours/site` | `/var/www/html/components/com_yours` |
+| `src/com_yours/media` | `/var/www/html/media/com_yours` |
 
 The README documents this with a PhpStorm and a VS Code `launch.json` example.
 This is the real cost of the zip-install workflow; it is paid once per project.
@@ -310,7 +313,7 @@ nothing is hidden that you cannot run by hand.
 | `up` | Build + start, wait for install, apply §5 config |
 | `down` | Stop, keep data |
 | `destroy` | Stop and delete both volumes — full reset |
-| `deploy` | Package + install `COMPONENT` (default `com_example`) |
+| `deploy` | Package + install `COMPONENT` (required) |
 | `package` | Write `dist/COMPONENT.zip` for installing on a real site |
 | `uninstall` | Remove by id; with no `ID`, lists them |
 | `shell` | Bash in the joomla container |
@@ -326,7 +329,9 @@ maintaining a second set of scripts for no gain.
 
 ## 9. Verification
 
-Run on Arch Linux, Docker 29.6 / Compose 5.3, from an empty directory.
+Run on Arch Linux, Docker 29.6 / Compose 5.3, from an empty directory. Rows
+6–12 used the `com_example` sample described in §6, which was removed after
+these results were recorded.
 
 | # | Check | Result |
 |---|---|---|
@@ -348,7 +353,15 @@ Run on Arch Linux, Docker 29.6 / Compose 5.3, from an empty directory.
 | 15 | Real mkcert certificate, chain verified | `verify=0` on site, admin and mail |
 | 15a | Joomla 6.1 installs on MariaDB 10.5.29 | 76 tables, `10.5.29-MariaDB-ubu2004`, site + component OK |
 | 16 | `make destroy` → `up` → `deploy` from nothing | full stack + component back in **11.7s** (images cached) |
-| 17 | `help`, `cli`, `db`, `uninstall`, `package` | all pass |
+| 17 | `help`, `cli`, `db`, `package`, `uninstall` listing | all pass |
+| 18 | `make uninstall ID=<id>` actually removing | **initially broken**, see below |
+
+Row 18 is the one that got away. `make uninstall` was only ever exercised on its
+no-`ID` listing branch, so two bugs shipped in the removal branch: the id is a
+positional argument, not `--id=`, and the command prompts for confirmation,
+which `exec -T` cannot answer. Both fixed (`extension:remove $(ID) -n`) and the
+removal verified against the database and the filesystem. The lesson is narrow
+and worth naming: a target with two branches needs both branches run.
 
 Row 12 is the loop that matters; row 16 is what makes this a repository rather
 than one machine's setup.
