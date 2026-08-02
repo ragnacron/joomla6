@@ -42,12 +42,6 @@ joomla6-dev/
 │   ├── xdebug.ini
 │   ├── proxy.conf               # makes PHP see HTTPS behind Caddy
 │   └── zip.php                  # cross-platform packer, runs inside the container
-├── src/                         # your components, one directory each
-│   └── com_yours/
-│       ├── com_yours.xml        # manifest
-│       ├── admin/
-│       ├── site/
-│       └── media/
 ├── certs/                       # gitignored — mkcert output, per machine
 └── dist/                        # gitignored — `make package` output only
 ```
@@ -99,7 +93,8 @@ COPY xdebug.ini /usr/local/etc/php/conf.d/zz-xdebug.ini
 
 Volumes:
 - `joomla_data:/var/www/html` — the whole Joomla tree, named volume.
-- `./src:/src:ro` — read by `docker/zip.php` when packaging.
+
+No bind mount for component sources. See §6.
 
 Environment (drives the entrypoint's unattended CLI install — no web installer):
 
@@ -235,14 +230,45 @@ Windows and the Debian-based Joomla image, and PHP's zip extension is a hard
 Joomla requirement — so it is guaranteed present exactly where we need it. One
 code path, three platforms, no `tar`/`Compress-Archive` divergence.
 
-`make deploy COMPONENT=com_yours`:
+### Sources live in other repositories — **[revised]**
 
-1. `docker compose exec -T joomla php /usr/local/bin/zip.php /src/com_yours /tmp/com_yours.zip`
-2. `docker compose exec -T joomla php cli/joomla.php extension:install --path=/tmp/com_yours.zip`
+Components are developed in their own repositories, so this one holds none of
+them. The original design bind-mounted `./src` into the container; that forces
+every component to live inside this repo, or forces a per-machine path in `.env`
+plus a container recreate whenever you switch projects.
+
+The mount existed only so `zip.php` could read the source. `docker compose cp`
+removes that need entirely, and with it the mount, the `src/` directory, and any
+configuration:
+
+`make deploy SRC=<any host path>`, where the directory's basename is the
+component name:
+
+1. `exec rm -rf /tmp/build` — or files deleted from the source linger in the zip
+2. `compose cp "$SRC" joomla:/tmp/build`
+3. `exec php /usr/local/bin/zip.php /tmp/build /tmp/<name>.zip`
+4. `exec php cli/joomla.php extension:install --path=/tmp/<name>.zip`
+
+`deploy` and `package` share steps 1–3 via a `_build` prerequisite.
+
+Any path works — absolute, relative, with or without a trailing slash, and a
+component nested anywhere inside its repository. Switching projects needs no
+config change and no restart. Copy cost is negligible at component size.
 
 `extension:install` on an already-installed extension runs the installer's
 update path, so the same target covers first install and every subsequent
 change — verified.
+
+### What the installer will not do
+
+Joomla's installer copies files in; it never deletes files that vanished from
+your package. Verified: a file removed from the source is correctly absent from
+the zip, and still present on the site afterwards.
+
+This is not worth working around. It is precisely what a user gets upgrading
+your component over an older version, so seeing it during development is a
+feature of using the real installer. `make uninstall` then `make deploy` is the
+clean slate.
 
 **[revised]** The planned `make reinstall` is now `make uninstall ID=<id>`.
 `extension:remove` needs a numeric id, and the only way to get one is
@@ -251,19 +277,15 @@ format. Parsing that table inside a Makefile is exactly the kind of thing that
 breaks silently a year later, so `make uninstall` with no `ID` just prints the
 list and asks for the id. Two seconds of human, zero fragile shell.
 
-`COMPONENT` has no default. Naming the directory every time costs nothing and
-means `deploy` can never install something you did not name.
+`SRC` has no default, so `deploy` can never install something you did not name.
 
 ### Sample component — removed
 
 A minimal `com_example` (manifest, admin and site view, one CSS file) shipped
 initially as the smoke test, and is what §9 was verified against. It was removed
-once that verification was done: an empty `src/` is the honest starting point for
-a repository whose whole purpose is holding *your* components, and a permanent
-sample is one more thing to keep in sync with Joomla's evolving MVC conventions.
-
-`src/` therefore contains only a README. It must not be deleted — it is the
-bind-mount source, and Docker silently creates a missing one as root.
+once that verification was done: a repository whose purpose is hosting *your*
+components should not ship a toy one that must be kept in sync with Joomla's
+evolving MVC conventions.
 
 ---
 
@@ -291,11 +313,11 @@ Windows, so it goes in unconditionally rather than in a platform override.
 files the debugger reports are the *installed* copies, not your sources. The IDE
 needs, per component:
 
-| Host | Container |
+| Host (inside your component repo) | Container |
 |---|---|
-| `src/com_yours/admin` | `/var/www/html/administrator/components/com_yours` |
-| `src/com_yours/site` | `/var/www/html/components/com_yours` |
-| `src/com_yours/media` | `/var/www/html/media/com_yours` |
+| `<repo>/admin` | `/var/www/html/administrator/components/com_hello` |
+| `<repo>/site` | `/var/www/html/components/com_hello` |
+| `<repo>/media` | `/var/www/html/media/com_hello` |
 
 The README documents this with a PhpStorm and a VS Code `launch.json` example.
 This is the real cost of the zip-install workflow; it is paid once per project.
@@ -313,8 +335,8 @@ nothing is hidden that you cannot run by hand.
 | `up` | Build + start, wait for install, apply §5 config |
 | `down` | Stop, keep data |
 | `destroy` | Stop and delete both volumes — full reset |
-| `deploy` | Package + install `COMPONENT` (required) |
-| `package` | Write `dist/COMPONENT.zip` for installing on a real site |
+| `deploy` | Build + install from `SRC=<host path>` |
+| `package` | Write `dist/<name>.zip` from `SRC=<host path>` |
 | `uninstall` | Remove by id; with no `ID`, lists them |
 | `shell` | Bash in the joomla container |
 | `cli` | Pass through to `cli/joomla.php`, e.g. `make cli ARGS="config:get"` |
@@ -354,6 +376,9 @@ these results were recorded.
 | 15a | Joomla 6.1 installs on MariaDB 10.5.29 | 76 tables, `10.5.29-MariaDB-ubu2004`, site + component OK |
 | 16 | `make destroy` → `up` → `deploy` from nothing | full stack + component back in **11.7s** (images cached) |
 | 17 | `help`, `cli`, `db`, `package`, `uninstall` listing | all pass |
+| 19 | Deploy from a directory **outside** this repo | ✓ absolute, relative, and trailing-slash paths |
+| 20 | Missing / non-existent `SRC` | refused with a usage line |
+| 21 | File deleted from source | absent from the zip, still on the site — installer behaviour, §6 |
 | 18 | `make uninstall ID=<id>` actually removing | **initially broken**, see below |
 
 Row 18 is the one that got away. `make uninstall` was only ever exercised on its

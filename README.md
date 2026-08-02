@@ -55,42 +55,60 @@ Admin credentials are in `.env` (`devpassword123` by default — Joomla requires
 
 ## Developing a component
 
-Create it under `src/`, one directory per component:
+Your components live in their own repositories, anywhere on disk. Nothing needs
+to be copied into this one:
 
 ```
-src/com_yours/
-├── com_yours.xml          # manifest
-├── admin/                 # -> administrator/components/com_yours
-├── site/                  # -> components/com_yours
-└── media/                 # -> media/com_yours
+make deploy SRC=~/code/com_hello
+make deploy SRC=../com_hello
 ```
 
-Then edit, and:
+`SRC` is any host path to a directory laid out as a Joomla component package:
 
 ```
-make deploy COMPONENT=com_yours
+com_hello/
+├── com_hello.xml          # manifest
+├── admin/                 # -> administrator/components/com_hello
+├── site/                  # -> components/com_hello
+└── media/                 # -> media/com_hello
 ```
 
-That zips the source and runs Joomla's real installer, so every change is
-validated against your manifest the same way a user's install would be. Refresh
-the browser to see it.
+If your repository keeps the component in a subdirectory, point `SRC` at that
+subdirectory — it is just a path.
 
-`COMPONENT` has no default — the directory name under `src/` is always explicit,
-so `deploy` cannot install something you did not mean.
+`deploy` copies the directory into the container, zips it, and runs Joomla's
+real installer, so every change is validated against your manifest the same way
+a user's install would be. Refresh the browser to see it.
 
-Reinstalling over an existing version is the normal path and is what `deploy`
-does. For a genuinely clean slate — renamed element, changed table schema —
-remove it first:
+Working inside a component repo all day? Add a shell alias:
 
 ```
-make uninstall            # lists components and their ids
-make uninstall ID=252
+alias jdeploy='make -C ~/code/joomla6 deploy SRC=$PWD'
 ```
 
 Shipping it to a real site:
 
 ```
-make package COMPONENT=com_yours   # -> dist/com_yours.zip
+make package SRC=~/code/com_hello    # -> dist/com_hello.zip
+```
+
+The zip is named after the directory, not the manifest.
+
+### Deleting a file does not delete it from the site
+
+Joomla's installer copies files in; it never removes files that disappeared from
+your package. A stale file keeps running until you remove the extension. This is
+not a quirk of this setup — it is exactly what your users get when they upgrade
+your component over an older version, which is worth seeing during development
+rather than in a bug report.
+
+For a genuinely clean slate — a deleted file, a renamed element, a changed table
+schema:
+
+```
+make uninstall            # lists components and their ids
+make uninstall ID=252
+make deploy SRC=~/code/com_hello
 ```
 
 ## All commands
@@ -103,8 +121,8 @@ Run `make` on its own for the list.
 | `up` | Start everything |
 | `down` | Stop, keep data |
 | `destroy` | Stop and delete all data — full reset |
-| `deploy` | Package and install `COMPONENT` |
-| `package` | Write `dist/COMPONENT.zip` for a real site |
+| `deploy` | Build and install from `SRC=<path>` |
+| `package` | Write `dist/<name>.zip` from `SRC=<path>` |
 | `uninstall` | Remove an extension by id |
 | `shell` | Bash in the Joomla container |
 | `cli` | Joomla CLI, e.g. `make cli ARGS="config:get"` |
@@ -121,11 +139,11 @@ slowdown. Use a browser extension ("Xdebug helper") or append
 debugger reports the *installed* paths, not your sources. Map them per
 component:
 
-| Host | Container |
+| Host (your component repo) | Container |
 |---|---|
-| `src/com_yours/admin` | `/var/www/html/administrator/components/com_yours` |
-| `src/com_yours/site` | `/var/www/html/components/com_yours` |
-| `src/com_yours/media` | `/var/www/html/media/com_yours` |
+| `<repo>/admin` | `/var/www/html/administrator/components/com_hello` |
+| `<repo>/site` | `/var/www/html/components/com_hello` |
+| `<repo>/media` | `/var/www/html/media/com_hello` |
 
 **PhpStorm:** Settings → PHP → Servers → add `joomla.test`, port 443, debugger
 Xdebug, tick "Use path mappings", enter the pairs above.
@@ -141,9 +159,9 @@ Xdebug, tick "Use path mappings", enter the pairs above.
     "request": "launch",
     "port": 9003,
     "pathMappings": {
-      "/var/www/html/administrator/components/com_yours": "${workspaceFolder}/src/com_yours/admin",
-      "/var/www/html/components/com_yours": "${workspaceFolder}/src/com_yours/site",
-      "/var/www/html/media/com_yours": "${workspaceFolder}/src/com_yours/media"
+      "/var/www/html/administrator/components/com_hello": "${workspaceFolder}/admin",
+      "/var/www/html/components/com_hello": "${workspaceFolder}/site",
+      "/var/www/html/media/com_hello": "${workspaceFolder}/media"
     }
   }]
 }
@@ -185,8 +203,8 @@ fixes it.
 **Site loads but CSS/links are `http://`.** `docker/proxy.conf` did not load;
 rebuild with `make up`.
 
-**Changes not showing.** `make deploy` again — editing `src/` alone changes
-nothing until it is installed. That is the deliberate trade-off of this setup;
+**Changes not showing.** `make deploy SRC=...` again — editing your source alone
+changes nothing until it is installed. That is the deliberate trade-off of this setup;
 see SPEC.md §10.
 
 ## License
