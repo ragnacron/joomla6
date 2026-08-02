@@ -1,7 +1,11 @@
 # Joomla 6 component development environment
 
-Joomla 6.1 + PHP 8.4 + MariaDB 11.4 behind a trusted-TLS reverse proxy, with
+Joomla 6.1 + PHP 8.4 + MariaDB 10.5.29 behind a trusted-TLS reverse proxy, with
 Xdebug and a mail catcher. Clone, two commands, `https://joomla.test`.
+
+The database version is pinned to match production. Changing it in
+`compose.yaml` requires `make destroy` first — MariaDB cannot open data files
+from a different major version. See [SPEC.md](SPEC.md) §3.3.
 
 See [SPEC.md](SPEC.md) for why it is built this way.
 

@@ -15,7 +15,7 @@ build because reality disagreed with the spec — marked **[revised]** below.
 |---|---|---|
 | Joomla version | `joomla:6.1-php8.4-apache` (official image) | Joomla 6 is current (6.1.2). Image is maintained and can auto-install, skipping the web installer. |
 | PHP | 8.4 | Joomla 6 requires ≥ 8.3, recommends 8.4. |
-| Database | MariaDB 11.4 LTS | Joomla 6 needs MariaDB ≥ 10.4. Lighter than MySQL, native arm64 (Apple Silicon). |
+| Database | MariaDB **10.5.29**, pinned | Matches the production server exactly, so schema and SQL behaviour are tested against what the code will actually run on. See §3.3. |
 | TLS | mkcert on the host + Caddy in a container | mkcert installs its root CA into the OS/browser trust store on all three platforms with one command. Caddy is a 6-line config and no Dockerfile. |
 | Hostname | `joomla.test`, `mail.joomla.test` | RFC 6761 reserved. Avoids the mDNS collision `.local` has on Arch/Avahi and macOS. |
 | Component workflow | zip + `extension:install` | Exercises the real manifest and installer on every change; catches packaging bugs that a symlinked dev tree hides. |
@@ -119,12 +119,33 @@ JOOMLA_SMTP_HOST_PORT=1025
 
 All values come from `.env` so credentials are per-machine, not committed.
 
-### 3.3 `db` — MariaDB
+### 3.3 `db` — MariaDB, pinned to production
 
-- Image: `mariadb:11.4`.
+- Image: `mariadb:10.5.29` — deliberately pinned, not a floating `10.5`.
 - Volume `db_data:/var/lib/mysql`.
-- Healthcheck on `healthcheck.sh --connect`; `joomla` waits on
-  `condition: service_healthy` so the installer never races the DB.
+- Healthcheck `healthcheck.sh --connect --innodb_initialized`; `joomla` waits on
+  `condition: service_healthy` so the installer never races the DB. Both flags
+  exist in the 10.5 image (checked — they are not 11.x-only), as do the
+  `MARIADB_*` environment variables.
+
+Production reports `10.5.29-MariaDB-0+deb11u1-log`; this image reports
+`10.5.29-MariaDB-ubu2004`. Same upstream server version, which is what governs
+SQL and schema behaviour — the difference is only the distro the package was
+built on, and the `-log` suffix, which just means binary logging is on in
+production. Neither is worth reproducing locally.
+
+Two facts worth stating plainly rather than discovering later:
+
+- **Joomla 6 requires MariaDB ≥ 10.4**, so 10.5 is supported but close to the
+  floor. Anything Joomla drops next will hit production first.
+- **MariaDB 10.5 reached end of life in June 2025.** That is production's
+  situation, not this repo's problem, but matching it means this environment is
+  pinned to an unmaintained branch on purpose.
+
+Changing the version is a data-file downgrade or upgrade, so it needs
+`make destroy` first — `make up` alone will fail to start on an incompatible
+volume. That is the mechanism for testing a production upgrade before it
+happens: change the tag, `make destroy && make up && make deploy`.
 
 ### 3.4 `mailpit`
 
@@ -325,6 +346,7 @@ Run on Arch Linux, Docker 29.6 / Compose 5.3, from an empty directory.
 | 14 | `make package` output ownership | `dist/com_example.zip`, owned by the host user |
 
 | 15 | Real mkcert certificate, chain verified | `verify=0` on site, admin and mail |
+| 15a | Joomla 6.1 installs on MariaDB 10.5.29 | 76 tables, `10.5.29-MariaDB-ubu2004`, site + component OK |
 | 16 | `make destroy` → `up` → `deploy` from nothing | full stack + component back in **11.7s** (images cached) |
 | 17 | `help`, `cli`, `db`, `uninstall`, `package` | all pass |
 

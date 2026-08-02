@@ -38,7 +38,9 @@ services:
       - "host.docker.internal:host-gateway"
 
   db:
-    image: mariadb:11.4
+    # Pinned to match production exactly. Bumping this is a downgrade/upgrade of
+    # the data files, so it needs `make destroy` first, not just `make up`.
+    image: mariadb:10.5.29
     environment:
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       MARIADB_DATABASE: ${DB_NAME}
