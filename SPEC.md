@@ -42,16 +42,10 @@ joomla6-dev/
 │   ├── xdebug.ini
 │   ├── proxy.conf               # makes PHP see HTTPS behind Caddy
 │   └── zip.php                  # cross-platform packer, runs inside the container
-├── certs/                       # gitignored — mkcert output, per machine
-└── dist/                        # gitignored — `make package` output only
+└── certs/                       # gitignored — mkcert output, per machine
 ```
 
-**[revised]** `dist/` is no longer a bind mount. Deploy zips to `/tmp` *inside*
-the container, so nothing root-owned lands in the working tree. `make package`
-uses `docker compose cp` to pull a zip out when you actually want one, and that
-writes as the host user.
-
-`certs/`, `dist/`, `.env` are gitignored. Everything else is committed, so a
+`certs/` and `.env` are gitignored. Everything else is committed, so a
 fresh clone plus `make setup && make up` reproduces the environment.
 
 ---
@@ -249,8 +243,6 @@ component name:
 3. `exec php /usr/local/bin/zip.php /tmp/build /tmp/<name>.zip`
 4. `exec php cli/joomla.php extension:install --path=/tmp/<name>.zip`
 
-`deploy` and `package` share steps 1–3 via a `_build` prerequisite.
-
 Any path works — absolute, relative, with or without a trailing slash, and a
 component nested anywhere inside its repository. Switching projects needs no
 config change and no restart. Copy cost is negligible at component size.
@@ -336,7 +328,6 @@ nothing is hidden that you cannot run by hand.
 | `down` | Stop, keep data |
 | `destroy` | Stop and delete both volumes — full reset |
 | `deploy` | Build + install from `SRC=<host path>` |
-| `package` | Write `dist/<name>.zip` from `SRC=<host path>` |
 | `uninstall` | Remove by id; with no `ID`, lists them |
 | `shell` | Bash in the joomla container |
 | `cli` | Pass through to `cli/joomla.php`, e.g. `make cli ARGS="config:get"` |
@@ -370,12 +361,11 @@ these results were recorded.
 | 11 | Media CSS serves | 200 |
 | 12 | **Edit → `make deploy` → refresh** | ✓, and reinstall-over-existing works |
 | 13 | Joomla configured for Mailpit; mail arrives | `mailer=smtp host=mailpit:1025`, inbox count 1 |
-| 14 | `make package` output ownership | `dist/com_example.zip`, owned by the host user |
 
 | 15 | Real mkcert certificate, chain verified | `verify=0` on site, admin and mail |
 | 15a | Joomla 6.1 installs on MariaDB 10.5.29 | 76 tables, `10.5.29-MariaDB-ubu2004`, site + component OK |
 | 16 | `make destroy` → `up` → `deploy` from nothing | full stack + component back in **11.7s** (images cached) |
-| 17 | `help`, `cli`, `db`, `package`, `uninstall` listing | all pass |
+| 17 | `help`, `cli`, `db`, `uninstall` listing | all pass |
 | 19 | Deploy from a directory **outside** this repo | ✓ absolute, relative, and trailing-slash paths |
 | 20 | Missing / non-existent `SRC` | refused with a usage line |
 | 21 | File deleted from source | absent from the zip, still on the site — installer behaviour, §6 |

@@ -86,14 +86,6 @@ Working inside a component repo all day? Add a shell alias:
 alias jdeploy='make -C ~/code/joomla6 deploy SRC=$PWD'
 ```
 
-Shipping it to a real site:
-
-```
-make package SRC=~/code/com_hello    # -> dist/com_hello.zip
-```
-
-The zip is named after the directory, not the manifest.
-
 ### Deleting a file does not delete it from the site
 
 Joomla's installer copies files in; it never removes files that disappeared from
@@ -122,7 +114,6 @@ Run `make` on its own for the list.
 | `down` | Stop, keep data |
 | `destroy` | Stop and delete all data — full reset |
 | `deploy` | Build and install from `SRC=<path>` |
-| `package` | Write `dist/<name>.zip` from `SRC=<path>` |
 | `uninstall` | Remove an extension by id |
 | `shell` | Bash in the Joomla container |
 | `cli` | Joomla CLI, e.g. `make cli ARGS="config:get"` |
