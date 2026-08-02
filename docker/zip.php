@@ -39,8 +39,11 @@ $files = new RecursiveIteratorIterator(
 
 $count = 0;
 
+// Editor and Finder droppings would otherwise ship inside `make package` zips.
+$junk = ['.DS_Store', 'Thumbs.db', 'desktop.ini'];
+
 foreach ($files as $file) {
-    if ($file->isFile()) {
+    if ($file->isFile() && !in_array($file->getFilename(), $junk, true)) {
         $zip->addFile($file->getPathname(), substr($file->getPathname(), strlen($base) + 1));
         $count++;
     }

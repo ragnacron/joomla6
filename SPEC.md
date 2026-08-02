@@ -324,13 +324,22 @@ Run on Arch Linux, Docker 29.6 / Compose 5.3, from an empty directory.
 | 13 | Joomla configured for Mailpit; mail arrives | `mailer=smtp host=mailpit:1025`, inbox count 1 |
 | 14 | `make package` output ownership | `dist/com_example.zip`, owned by the host user |
 
-Row 12 is the loop that matters. Not yet run on macOS or Windows/WSL2 — the
-image is multi-arch and every host-side step is `make` + `mkcert`, but that is
-an expectation, not a measurement.
+| 15 | Real mkcert certificate, chain verified | `verify=0` on site, admin and mail |
+| 16 | `make destroy` → `up` → `deploy` from nothing | full stack + component back in **11.7s** (images cached) |
+| 17 | `help`, `cli`, `db`, `uninstall`, `package` | all pass |
 
-TLS was verified with a throwaway self-signed certificate, since `mkcert` is not
-installed on this machine — chain and headers are proven, browser trust is not.
-Run `make setup` once mkcert is installed to replace it.
+Row 12 is the loop that matters; row 16 is what makes this a repository rather
+than one machine's setup.
+
+Two things are **not** measured:
+
+- **macOS and Windows/WSL2.** The image is multi-arch and every host-side step is
+  `make` + `mkcert`, but that is an expectation, not a result.
+- **Browser trust.** `mkcert -install` needs sudo, so the CA is not in this
+  machine's system store yet. The chain itself verifies against the mkcert root
+  (`curl --cacert "$(mkcert -CAROOT)/rootCA.pem"` → 200, `verify=0`), which
+  proves Caddy is serving the right certificate; what remains is purely the
+  trust-store step.
 
 ---
 

@@ -23,8 +23,12 @@ make up        # ~1 min on first run — installs Joomla
 make deploy    # builds and installs src/com_example
 ```
 
-`make setup` prints a line to add to your hosts file — it does not edit system
-files itself:
+`make setup` runs `mkcert -install`, which **asks for your sudo password** to put
+the local CA into the system trust store. That is the one privileged step; it is
+not a hang. Restart the browser afterwards.
+
+It then prints a line to add to your hosts file — it does not edit system files
+itself:
 
 ```
 127.0.0.1 joomla.test mail.joomla.test
@@ -151,7 +155,14 @@ Everything it sends shows up at https://mail.joomla.test.
 ## Troubleshooting
 
 **Browser does not trust the certificate.** `mkcert -install` was skipped or the
-browser was not restarted. Firefox additionally needs the `nss` package.
+browser was not restarted. Firefox additionally needs the `nss` package. Check
+with `curl --cacert "$(mkcert -CAROOT)/rootCA.pem" https://joomla.test/` — if
+that works but the browser does not, it is a trust-store problem, not a
+certificate problem.
+
+**Containers do not come back after a reboot.** Deliberate — there is no restart
+policy, so the stack does not silently reclaim ports 80/443 on every boot. Run
+`make up` (~10s once images are cached).
 
 **Ports 80/443 already in use.** Set `HTTP_PORT` / `HTTPS_PORT` in `.env`. The
 URL then needs the port: `https://joomla.test:8443`.
