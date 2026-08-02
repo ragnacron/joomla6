@@ -1,0 +1,9 @@
+joomla.test {
+	tls /certs/joomla.test.pem /certs/joomla.test-key.pem
+	reverse_proxy joomla:80
+}
+
+mail.joomla.test {
+	tls /certs/joomla.test.pem /certs/joomla.test-key.pem
+	reverse_proxy mailpit:8025
+}

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<extension type="component" method="upgrade">
+	<name>Example</name>
+	<creationDate>2026-08-02</creationDate>
+	<author>Dev</author>
+	<version>1.0.0</version>
+	<description>Smoke-test component. Proves build -> install -> serve works.</description>
+
+	<namespace path="src">Acme\Component\Example</namespace>
+
+	<files folder="site">
+		<folder>src</folder>
+		<folder>tmpl</folder>
+	</files>
+
+	<media destination="com_example" folder="media">
+		<folder>css</folder>
+	</media>
+
+	<administration>
+		<menu link="index.php?option=com_example">Example</menu>
+		<files folder="admin">
+			<folder>services</folder>
+			<folder>src</folder>
+			<folder>tmpl</folder>
+		</files>
+	</administration>
+</extension>
