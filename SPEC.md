@@ -18,7 +18,7 @@ build because reality disagreed with the spec — marked **[revised]** below.
 | Database | MariaDB **10.5.29**, pinned | Matches the production server exactly, so schema and SQL behaviour are tested against what the code will actually run on. See §3.3. |
 | TLS | mkcert on the host + Caddy in a container | mkcert installs its root CA into the OS/browser trust store on all three platforms with one command. Caddy is a 6-line config and no Dockerfile. |
 | Hostname | `joomla.test`, `mail.joomla.test` | RFC 6761 reserved. Avoids the mDNS collision `.local` has on Arch/Avahi and macOS. |
-| Component workflow | zip + `extension:install` | Exercises the real manifest and installer on every change; catches packaging bugs that a symlinked dev tree hides. |
+| Component workflow | install a pre-built zip via `extension:install` | Exercises the real installer. Building the zip belongs to the extension's own repo, which knows its artefacts from its sources. See §6. |
 | Joomla webroot | named volume, **not** bind-mounted | Fast file I/O on macOS/Windows. Nothing to gain from bind-mounting core when the component ships as a zip. |
 | Extras | Xdebug, Mailpit, Makefile | Chosen. No Adminer. |
 
@@ -40,8 +40,7 @@ joomla6-dev/
 ├── docker/
 │   ├── joomla.Dockerfile        # official image + xdebug
 │   ├── xdebug.ini
-│   ├── proxy.conf               # makes PHP see HTTPS behind Caddy
-│   └── zip.php                  # cross-platform packer, runs inside the container
+│   └── proxy.conf               # makes PHP see HTTPS behind Caddy
 └── certs/                       # gitignored — mkcert output, per machine
 ```
 
@@ -212,53 +211,55 @@ The image's entrypoint has no init-hook directory, so `make up` polls for
 
 ---
 
-## 6. The component workflow
+## 6. The deploy workflow — **[revised twice]**
 
-`extension:install --path=` requires a **zip** — it calls
-`InstallerHelper::unpack()` and rejects a plain directory. So every change is
-packaged before installing.
+**This environment does not build anything.** It installs a zip you already
+built. Extensions are developed in their own repositories, which have their own
+build scripts that know which files are artefacts and which are sources.
 
-Packaging runs *inside* the container via `docker/zip.php` using PHP's
-`ZipArchive`, rather than on the host. Rationale: `zip` is not present on
-Windows and the Debian-based Joomla image, and PHP's zip extension is a hard
-Joomla requirement — so it is guaranteed present exactly where we need it. One
-code path, three platforms, no `tar`/`Compress-Archive` divergence.
+```
+make deploy ZIP=~/code/pkg_hello/dist/pkg_hello.zip
+```
 
-### Sources live in other repositories — **[revised]**
+1. `compose cp "$ZIP" joomla:/tmp/deploy.zip`
+2. `exec php cli/joomla.php extension:install --path=/tmp/deploy.zip`
 
-Components are developed in their own repositories, so this one holds none of
-them. The original design bind-mounted `./src` into the container; that forces
-every component to live inside this repo, or forces a per-machine path in `.env`
-plus a container recreate whenever you switch projects.
+That is the entire mechanism. Any host path works, absolute or relative;
+switching projects needs no config change and no restart.
 
-The mount existed only so `zip.php` could read the source. `docker compose cp`
-removes that need entirely, and with it the mount, the `src/` directory, and any
-configuration:
+### How it got here
 
-`make deploy SRC=<any host path>`, where the directory's basename is the
-component name:
+Two earlier designs were wrong, and both were wrong in the same direction —
+this repo trying to do a job that belongs to the extension's own repo.
 
-1. `exec rm -rf /tmp/build` — or files deleted from the source linger in the zip
-2. `compose cp "$SRC" joomla:/tmp/build`
-3. `exec php /usr/local/bin/zip.php /tmp/build /tmp/<name>.zip`
-4. `exec php cli/joomla.php extension:install --path=/tmp/<name>.zip`
+1. **Bind-mount `./src`, zip it in-container.** Forced every component to live
+   inside this repository. Replaced by `docker compose cp` from any path.
+2. **`compose cp` a directory, then zip it in-container** with `docker/zip.php`
+   (PHP's `ZipArchive`, chosen because `zip` is absent on Windows and in the
+   Debian-based image). Still wrong: zipping a source directory wholesale sweeps
+   in `.git`, `node_modules` and tests, and it cannot express a *package*
+   (`pkg_*`) at all — those contain several extensions plus nested zips, which
+   no naive directory walk produces.
 
-Any path works — absolute, relative, with or without a trailing slash, and a
-component nested anywhere inside its repository. Switching projects needs no
-config change and no restart. Copy cost is negligible at component size.
+Accepting only a built zip deleted `zip.php` entirely, along with the
+`/tmp/build` wipe that stopped deleted files lingering, the `NAME` derivation,
+and the cross-platform packaging rationale. The build problem was never this
+repo's to solve.
+
+`deploy` rejects anything that is not an existing `*.zip`. Joomla's installer
+also accepts `.tar.gz` and `.tar.bz2`; restricting to zip is deliberate, since
+that is what Joomla extensions actually ship as. Relaxing it is one `case` arm.
 
 `extension:install` on an already-installed extension runs the installer's
-update path, so the same target covers first install and every subsequent
-change — verified.
+update path, so one target covers first install and every subsequent change.
 
 ### What the installer will not do
 
 Joomla's installer copies files in; it never deletes files that vanished from
-your package. Verified: a file removed from the source is correctly absent from
-the zip, and still present on the site afterwards.
+your package. A stale file keeps running until the extension is removed.
 
 This is not worth working around. It is precisely what a user gets upgrading
-your component over an older version, so seeing it during development is a
+your extension over an older version, so seeing it during development is a
 feature of using the real installer. `make uninstall` then `make deploy` is the
 clean slate.
 
@@ -268,8 +269,6 @@ clean slate.
 format. Parsing that table inside a Makefile is exactly the kind of thing that
 breaks silently a year later, so `make uninstall` with no `ID` just prints the
 list and asks for the id. Two seconds of human, zero fragile shell.
-
-`SRC` has no default, so `deploy` can never install something you did not name.
 
 ### Sample component — removed
 
@@ -327,7 +326,7 @@ nothing is hidden that you cannot run by hand.
 | `up` | Build + start, wait for install, apply §5 config |
 | `down` | Stop, keep data |
 | `destroy` | Stop and delete both volumes — full reset |
-| `deploy` | Build + install from `SRC=<host path>` |
+| `deploy` | Install a built zip from `ZIP=<host path>` |
 | `uninstall` | Remove by id; with no `ID`, lists them |
 | `shell` | Bash in the joomla container |
 | `cli` | Pass through to `cli/joomla.php`, e.g. `make cli ARGS="config:get"` |
@@ -353,7 +352,7 @@ these results were recorded.
 | 3 | `https://joomla.test` and `/administrator` | 200, 200 |
 | 4 | `http://` → `https://` | 308 |
 | 5 | Generated URLs use `https://` | all `https://joomla.test/...` |
-| 6 | `make deploy` packages and installs | 10 files, "Extension installed successfully" |
+| 6 | `make deploy` installs | "Extension installed successfully" |
 | 7 | Files land in all three roots | `administrator/components/`, `components/`, `media/` |
 | 8 | Registered and enabled in the DB | `Example  252  1.0.0  component  Yes` |
 | 9 | Site view renders (through the SEF router) | ✓ |
@@ -366,9 +365,10 @@ these results were recorded.
 | 15a | Joomla 6.1 installs on MariaDB 10.5.29 | 76 tables, `10.5.29-MariaDB-ubu2004`, site + component OK |
 | 16 | `make destroy` → `up` → `deploy` from nothing | full stack + component back in **11.7s** (images cached) |
 | 17 | `help`, `cli`, `db`, `uninstall` listing | all pass |
-| 19 | Deploy from a directory **outside** this repo | ✓ absolute, relative, and trailing-slash paths |
-| 20 | Missing / non-existent `SRC` | refused with a usage line |
-| 21 | File deleted from source | absent from the zip, still on the site — installer behaviour, §6 |
+| 19 | Deploy a zip from **outside** this repo | ✓ absolute and relative paths |
+| 19a | A real `pkg_*` package with a nested component zip | both rows registered: `package Hello Package`, `component Example` |
+| 20 | Missing, non-existent, or non-zip `ZIP` | each refused with its own message |
+| 21 | File deleted from a rebuilt zip | still on the site — installer behaviour, §6 |
 | 18 | `make uninstall ID=<id>` actually removing | **initially broken**, see below |
 
 Row 18 is the one that got away. `make uninstall` was only ever exercised on its

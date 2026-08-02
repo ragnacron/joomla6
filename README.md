@@ -26,7 +26,7 @@ make setup     # .env, certificate, prints the hosts line
 make up        # ~1 min on first run — installs Joomla
 ```
 
-That gives you a working Joomla 6 site. Adding a component is the next section.
+That gives you a working Joomla 6 site. Installing an extension is the next section.
 
 `make setup` runs `mkcert -install`, which **asks for your sudo password** to put
 the local CA into the system trust store. That is the one privileged step; it is
@@ -53,37 +53,31 @@ Then:
 Admin credentials are in `.env` (`devpassword123` by default — Joomla requires
 12+ characters).
 
-## Developing a component
+## Installing your extension
 
-Your components live in their own repositories, anywhere on disk. Nothing needs
-to be copied into this one:
-
-```
-make deploy SRC=~/code/com_hello
-make deploy SRC=../com_hello
-```
-
-`SRC` is any host path to a directory laid out as a Joomla component package:
+This environment installs a zip you already built. It does not build anything —
+your extension's own repository already knows which files are sources and which
+are artefacts, and its build script produces a clean zip. Duplicating that here
+could only do it worse.
 
 ```
-com_hello/
-├── com_hello.xml          # manifest
-├── admin/                 # -> administrator/components/com_hello
-├── site/                  # -> components/com_hello
-└── media/                 # -> media/com_hello
+./build.sh                                   # whatever your repo already uses
+make deploy ZIP=~/code/pkg_hello/dist/pkg_hello.zip
 ```
 
-If your repository keeps the component in a subdirectory, point `SRC` at that
-subdirectory — it is just a path.
+`ZIP` is any host path to a built extension zip — component, module, plugin, or
+a full `pkg_*` package with its nested zips. It goes through Joomla's real
+installer, so every deploy is validated exactly the way a user's install is.
+Refresh the browser to see it.
 
-`deploy` copies the directory into the container, zips it, and runs Joomla's
-real installer, so every change is validated against your manifest the same way
-a user's install would be. Refresh the browser to see it.
+Anything that is not an existing `*.zip` is refused. Joomla also accepts
+`.tar.gz` and `.tar.bz2`; this deliberately does not, since Joomla extensions
+ship as zips.
 
-Working inside a component repo all day? Add a shell alias:
+Working inside an extension repo all day? Add a shell alias:
 
 ```
-alias jdeploy='make -C ~/code/joomla6 deploy SRC=$PWD'
+alias jdeploy='make -C ~/code/joomla6 deploy ZIP=$PWD/dist/pkg_hello.zip'
 ```
 
 ### Deleting a file does not delete it from the site
@@ -91,16 +85,16 @@ alias jdeploy='make -C ~/code/joomla6 deploy SRC=$PWD'
 Joomla's installer copies files in; it never removes files that disappeared from
 your package. A stale file keeps running until you remove the extension. This is
 not a quirk of this setup — it is exactly what your users get when they upgrade
-your component over an older version, which is worth seeing during development
+your extension over an older version, which is worth seeing during development
 rather than in a bug report.
 
 For a genuinely clean slate — a deleted file, a renamed element, a changed table
 schema:
 
 ```
-make uninstall            # lists components and their ids
+make uninstall            # lists extensions and their ids
 make uninstall ID=252
-make deploy SRC=~/code/com_hello
+make deploy ZIP=~/code/pkg_hello/dist/pkg_hello.zip
 ```
 
 ## All commands
@@ -113,7 +107,7 @@ Run `make` on its own for the list.
 | `up` | Start everything |
 | `down` | Stop, keep data |
 | `destroy` | Stop and delete all data — full reset |
-| `deploy` | Build and install from `SRC=<path>` |
+| `deploy` | Install a built zip from `ZIP=<path>` |
 | `uninstall` | Remove an extension by id |
 | `shell` | Bash in the Joomla container |
 | `cli` | Joomla CLI, e.g. `make cli ARGS="config:get"` |
@@ -126,9 +120,9 @@ Listens on port 9003 and stays idle until triggered, so there is no constant
 slowdown. Use a browser extension ("Xdebug helper") or append
 `?XDEBUG_TRIGGER=1`.
 
-**Path mapping is required.** Because components install from a zip, the
+**Path mapping is required.** Because extensions install from a zip, the
 debugger reports the *installed* paths, not your sources. Map them per
-component:
+extension:
 
 | Host (your component repo) | Container |
 |---|---|
@@ -194,8 +188,8 @@ fixes it.
 **Site loads but CSS/links are `http://`.** `docker/proxy.conf` did not load;
 rebuild with `make up`.
 
-**Changes not showing.** `make deploy SRC=...` again — editing your source alone
-changes nothing until it is installed. That is the deliberate trade-off of this setup;
+**Changes not showing.** Rebuild the zip, then `make deploy ZIP=...` again —
+editing your source alone changes nothing until it is rebuilt and installed. That is the deliberate trade-off of this setup;
 see SPEC.md §10.
 
 ## License

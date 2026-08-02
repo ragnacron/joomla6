@@ -1,7 +1,6 @@
-# SRC is a host path to a component directory — anywhere, including another
-# repository. Its basename is the component name.
-SRC ?=
-NAME = $(notdir $(patsubst %/,%,$(SRC)))
+# ZIP is a host path to a built extension zip — anywhere, including another
+# repository's build output. Building it is that repository's job, not this one's.
+ZIP ?=
 
 DC := docker compose
 EXEC := $(DC) exec -T joomla
@@ -46,14 +45,12 @@ down: ## Stop, keep the database and site
 destroy: ## Stop and delete all data — full reset
 	$(DC) down -v
 
-deploy: ## Build and install: make deploy SRC=../com_yours
-	@test -n "$(SRC)" || { echo "usage: make deploy SRC=path/to/com_yours"; exit 1; }
-	@test -d "$(SRC)" || { echo "not a directory: $(SRC)"; exit 1; }
-	@# Wiped first, or files you deleted in the source would linger in the zip.
-	@$(EXEC) rm -rf /tmp/build
-	@$(DC) cp "$(SRC)" joomla:/tmp/build >/dev/null
-	@$(EXEC) php /usr/local/bin/zip.php /tmp/build /tmp/$(NAME).zip
-	@$(EXEC) php cli/joomla.php extension:install --path=/tmp/$(NAME).zip
+deploy: ## Install a built zip: make deploy ZIP=../dist/pkg_yours.zip
+	@test -n "$(ZIP)" || { echo "usage: make deploy ZIP=path/to/extension.zip"; exit 1; }
+	@test -f "$(ZIP)" || { echo "not a file: $(ZIP)"; exit 1; }
+	@case "$(ZIP)" in *.zip) ;; *) echo "not a zip: $(ZIP)"; exit 1 ;; esac
+	@$(DC) cp "$(ZIP)" joomla:/tmp/deploy.zip >/dev/null
+	@$(EXEC) php cli/joomla.php extension:install --path=/tmp/deploy.zip
 
 uninstall: ## Remove an extension: make uninstall ID=123 (no ID lists them)
 	@test -n "$(ID)" || { $(EXEC) php cli/joomla.php extension:list --type=component; \
