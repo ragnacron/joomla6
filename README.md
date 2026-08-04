@@ -93,7 +93,7 @@ schema:
 
 ```
 make uninstall                     # lists packages and their ids
-make uninstall ID=260
+make uninstall ID=<id>             # the id from that listing
 make deploy ZIP=~/code/pkg_hello/dist/pkg_hello.zip
 ```
 
@@ -103,8 +103,8 @@ the convenience listing is filtered, and it defaults to `package` because that
 is the usual deliverable:
 
 ```
-make uninstall                     # packages          (3 rows on a fresh site)
-make uninstall TYPE=component      # components       (38)
+make uninstall                     # packages          (2 rows on a fresh site)
+make uninstall TYPE=component      # components       (37)
 make uninstall TYPE=plugin         # plugins         (157)
 make uninstall TYPE=               # every type      (254)
 ```
