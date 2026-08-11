@@ -21,12 +21,33 @@ setup: ## One-time per machine: .env, certificates, hosts line
 	mkcert -install
 	mkcert -cert-file certs/joomla.test.pem -key-file certs/joomla.test-key.pem \
 		joomla.test "*.joomla.test"
+	$(MAKE) certs/cacert-mkcert.pem
 	@echo
 	@echo "Add this line to your hosts file, then run 'make up':"
 	@echo "  127.0.0.1 joomla.test mail.joomla.test"
 
+# The CA bundle PHP inside the container trusts, with the mkcert root appended.
+#
+# Joomla's HTTP transports pin `Composer\CaBundle\CaBundle::getBundledCaBundlePath()` — the copy
+# shipped inside libraries/vendor — rather than getSystemCaRootBundlePath(). So the container's system
+# store, SSL_CERT_FILE and php.ini's curl.cainfo are all ignored, and an extension calling another
+# *.test stack over HTTPS cannot be made to trust it by any of the usual routes. compose mounts this
+# file read-only over the shipped one, which is the only hook left that is not a code change to the
+# extension doing the calling.
+#
+# Built from the *host's* store rather than Joomla's own copy so that it works before the stack is up:
+# a missing bind-mount source is created by Docker as a directory, which is a mess to undo. In practice
+# a superset of the vendored list.
+certs/cacert-mkcert.pem:
+	@mkdir -p certs
+	@command -v mkcert >/dev/null || { echo "mkcert is not installed."; exit 1; }
+	@test -f "$$(mkcert -CAROOT)/rootCA.pem" || { echo "No mkcert root CA. Run 'mkcert -install'."; exit 1; }
+	@cat /etc/ssl/certs/ca-certificates.crt "$$(mkcert -CAROOT)/rootCA.pem" > $@
+	@echo "$@ written, $$(grep -c 'BEGIN CERTIFICATE' $@) certificates including the mkcert root"
+
 up: ## Start everything (first run installs Joomla, ~1 min)
 	@test -f certs/joomla.test.pem || { echo "No certificate. Run 'make setup' first."; exit 1; }
+	@test -f certs/cacert-mkcert.pem || $(MAKE) certs/cacert-mkcert.pem
 	$(DC) up -d --build
 	@printf "waiting for Joomla to install"
 	@for i in $$(seq 1 60); do \

@@ -34,9 +34,23 @@ services:
       JOOMLA_SMTP_HOST_PORT: 1025
     volumes:
       - joomla_data:/var/www/html
+      # The host's CA store with the mkcert root appended, built by `make setup`, so that code in here
+      # can call another *.test stack over HTTPS. docker/cacert.ini points PHP at it and says why it is
+      # an ini setting rather than SSL_CERT_FILE.
+      #
+      # This is what the *framework* HTTP transports (Joomla\Http) use, via
+      # CaBundle::getSystemCaRootBundlePath(). The *CMS* transports (Joomla\CMS\Http) do not: they pin
+      # getBundledCaBundlePath(), the copy inside libraries/vendor/composer/ca-bundle, and consult
+      # neither the environment nor php.ini. Two factories in one installation, two trust anchors.
+      - ./certs/cacert-mkcert.pem:/etc/ssl/certs/cacert-mkcert.pem:ro
     # Linux has no native host.docker.internal; harmless on macOS/Windows.
+    #
+    # keycloak.test is mapped too, because the host resolver answers 127.0.0.2 for it — which inside
+    # this container is *this container's* loopback, where nothing listens. host-gateway is the docker0
+    # address the keycloak stack's Caddy also publishes on.
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      - "keycloak.test:host-gateway"
 
   db:
     # Pinned to match production exactly. Bumping this is a downgrade/upgrade of
