@@ -9,6 +9,10 @@ TYPE ?= package
 DC := docker compose
 EXEC := $(DC) exec -T joomla
 
+# Anything that writes into the web root runs as the user Apache runs as, or it leaves files the
+# web installer cannot overwrite afterwards. See the note on `deploy`.
+EXEC_WEB := $(DC) exec -T -u www-data joomla
+
 .DEFAULT_GOAL := help
 .PHONY: help setup up down destroy deploy uninstall shell cli logs db
 
@@ -75,7 +79,12 @@ deploy: ## Install a built zip: make deploy ZIP=../dist/pkg_yours.zip
 	@test -f "$(ZIP)" || { echo "not a file: $(ZIP)"; exit 1; }
 	@case "$(ZIP)" in *.zip) ;; *) echo "not a zip: $(ZIP)"; exit 1 ;; esac
 	@$(DC) cp "$(ZIP)" joomla:/tmp/deploy.zip >/dev/null
-	@$(EXEC) php cli/joomla.php extension:install --path=/tmp/deploy.zip
+	@# Installing as root leaves the extension's files root-owned, and the web installer — which is
+	@# www-data — then cannot overwrite them. It fails with "Copy file failed" naming the child zip,
+	@# and nothing says why. So: repair anything already root-owned (including the zip `cp` just
+	@# wrote as root), then install as www-data. Both install routes stay usable, in any order.
+	@$(EXEC) find /var/www/html /tmp/deploy.zip ! -user www-data -exec chown www-data:www-data {} +
+	@$(EXEC_WEB) php cli/joomla.php extension:install --path=/tmp/deploy.zip
 
 uninstall: ## Remove any extension: make uninstall ID=123 (no ID lists TYPE, default package)
 	@test -n "$(ID)" || { $(EXEC) php cli/joomla.php extension:list $(if $(TYPE),--type=$(TYPE)); \
