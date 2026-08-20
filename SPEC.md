@@ -13,7 +13,7 @@ build because reality disagreed with the spec — marked **[revised]** below.
 
 | Decision | Choice | Why |
 |---|---|---|
-| Joomla version | `joomla:6.1-php8.4-apache` (official image) | Joomla 6 is current (6.1.2). Image is maintained and can auto-install, skipping the web installer. |
+| Joomla version | `joomla:6.1-php8.4-apache` (official image) | Floating minor tag: every 6.1.x patch arrives on the next `make up`, which builds with `--pull`. Deliberately the opposite of the MariaDB pin below — MariaDB has to match production, Joomla only has to be current. Image is maintained and can auto-install, skipping the web installer. |
 | PHP | 8.4 | Joomla 6 requires ≥ 8.3, recommends 8.4. |
 | Database | MariaDB **10.5.29**, pinned | Matches the production server exactly, so schema and SQL behaviour are tested against what the code will actually run on. See §3.3. |
 | TLS | mkcert on the host + Caddy in a container | mkcert installs its root CA into the OS/browser trust store on all three platforms with one command. Caddy is a 6-line config and no Dockerfile. |
@@ -83,6 +83,10 @@ FROM joomla:6.1-php8.4-apache
 RUN pecl install xdebug && docker-php-ext-enable xdebug
 COPY xdebug.ini /usr/local/etc/php/conf.d/zz-xdebug.ini
 ```
+
+The webroot is the named volume `joomla_data`, and the image's entrypoint only populates an
+*empty* one. So a newer image never reaches a stack that already has a site in it: a Joomla
+upgrade needs `make destroy` first, exactly like the MariaDB bump in §3.3.
 
 Volumes:
 - `joomla_data:/var/www/html` — the whole Joomla tree, named volume.
@@ -366,7 +370,7 @@ these results were recorded.
 | # | Check | Result |
 |---|---|---|
 | 1 | Stack builds; Xdebug compiles against PHP 8.4 | 3.5.3, `mode=debug,develop`, `start_with_request=trigger` |
-| 2 | Joomla installs unattended, no web installer | Joomla 6.1.2 / PHP 8.4.24 |
+| 2 | Joomla installs unattended, no web installer | Joomla 6.1.3 / PHP 8.4.24 |
 | 3 | `https://joomla.test` and `/administrator` | 200, 200 |
 | 4 | `http://` → `https://` | 308 |
 | 5 | Generated URLs use `https://` | all `https://joomla.test/...` |

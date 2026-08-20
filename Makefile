@@ -52,7 +52,10 @@ certs/cacert-mkcert.pem:
 up: ## Start everything (first run installs Joomla, ~1 min)
 	@test -f certs/joomla.test.pem || { echo "No certificate. Run 'make setup' first."; exit 1; }
 	@test -f certs/cacert-mkcert.pem || $(MAKE) certs/cacert-mkcert.pem
-	$(DC) up -d --build
+	@# The base tag is a floating 6.1, so a cached image silently keeps an old patch
+	@# release. --pull on the build is what makes the floating tag mean anything.
+	$(DC) build --pull
+	$(DC) up -d
 	@printf "waiting for Joomla to install"
 	@for i in $$(seq 1 60); do \
 		$(EXEC) test -f configuration.php >/dev/null 2>&1 && break; \
